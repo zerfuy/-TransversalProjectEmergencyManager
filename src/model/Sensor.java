@@ -59,7 +59,7 @@ public class Sensor {
 
 	@Override
 	public String toString() {
-		return "Sensor [id=" + id + ", x=" + x + ", y=" + y + ", intensity=" + intensity + "]";
+		return "Sensor [id=" + id + ", x=" + x + ", y=" + y + ", intensity=" + intensity + ", handled=" + handled + "]";
 	}
 	
 }
