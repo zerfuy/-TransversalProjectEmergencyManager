@@ -1,6 +1,7 @@
 package model;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class Station {
@@ -48,6 +49,14 @@ public class Station {
 	
 	public void addFireEngine(FireEngine fireEngine) {
 		this.fireEngines.add(fireEngine);
+	}
+	
+	public void sortFireEngine() {
+		Collections.sort(this.fireEngines);
+	}
+	
+	public void removeTruck(FireEngine fireEngine) {
+		this.fireEngines.remove(fireEngine);
 	}
 
 	@Override
