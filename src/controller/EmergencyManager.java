@@ -22,23 +22,27 @@ public class EmergencyManager {
 	private List<Sensor> stationSensors;
 	private List<Sensor> unhandledActiveFires;
 	private List<Station> stations;
+	private List<Intervention> interventions;
+	private List<Intervention> newInterventions;
+	private int fireHandled;
 
 	public EmergencyManager() {
 
-		debug = 0;
-		System.out.println("EmergencyManager initialized successfully");
+		debug = 1;
+		System.out.println("EmergencyManager initialized successfully\n");
 	}
 
-	public int start() {
+	public int run() {
 
 		// Opening database connection
 		EmergencyManagerConnection = new PostgreSQLJDBC("jdbc:postgresql://manny.db.elephantsql.com:5432/", "ngcbqvhq",
 				"Ppjleq3n6HQF5qPheDze2QFzG4LHxTAf").getConnection();
 
 		// Getting Sensors from db
-		activeSensors = new ArrayList<>();
-		stationSensors = new ArrayList<>();
-		this.getSensorsFromDB();
+		this.getSensors();
+		
+		// Getting Intervention from db
+		this.updateInterventions();
 
 		// Checking for unhandled fires
 		System.out.printf("Checking for unhandled fires... ");
@@ -53,12 +57,19 @@ public class EmergencyManager {
 
 			// Handling fires
 			this.handleFires();
+			
+			// Updating fires
+			this.addInterventions();
+			
+			System.out.println("Fire handled " + fireHandled + "/" + unhandledActiveFires.size());
 
 		} else {
 			
 			System.out.println("no unhandled fire detected");
 			
 		}
+		
+		System.out.printf("\nRun done... \n");
 
 		try {
 			System.out.printf("Closing conection with db... ");
@@ -71,12 +82,15 @@ public class EmergencyManager {
 
 		return 1;
 	}
-
-	private void getSensorsFromDB() {
+	
+	private void getSensors() {
+		
+		activeSensors = new ArrayList<>();
+		stationSensors = new ArrayList<>();
 
 		try {
 			// Get Active Sensors
-			String getActiveSensorsQuery = "select f.id, f.intensity, f.handled, p.real_x, p.real_y from fire f join real_pos p on f.id_real_pos = p.id where intensity > 0";
+			String getActiveSensorsQuery = "select f.id, f.intensity, f.handled, p.real_x, p.real_y from fire f join real_pos p on f.id_real_pos = p.id where intensity > 0 or f.id in (select id_fire from intervention)";
 			PreparedStatement pstActiveSensors = EmergencyManagerConnection.prepareStatement(getActiveSensorsQuery);
 			ResultSet resultSetActiveSensors = pstActiveSensors.executeQuery();
 
@@ -110,16 +124,18 @@ public class EmergencyManager {
 			System.out.println("Got all active sensors (" + activeSensors.size() + ")");
 			if (debug > 0) {
 				for (Sensor sensor : activeSensors) {
-					System.out.println(sensor);
+					System.out.println("\t" + sensor);
 				}
 			}
+			System.out.println();
 
 			System.out.println("Got all station sensors (" + stationSensors.size() + ")");
 			if (debug > 0) {
 				for (Sensor sensor : stationSensors) {
-					System.out.println(sensor);
+					System.out.println("\t" + sensor);
 				}
 			}
+			System.out.println();
 
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
@@ -128,7 +144,113 @@ public class EmergencyManager {
 
 	}
 
-	private void getFireStationsFromDB() {
+	private void updateInterventions() {
+		
+		interventions = new ArrayList<>();
+		List<FireEngine> intervention_fire_engine = new ArrayList<>();
+		
+		try {
+			
+			// Get Intervention fire engine
+			String getFireEnginesQuery = "select fe.id, fe.x_pos, fe.y_pos, fe.rank, fe.busy from fire_engine fe";
+			PreparedStatement pstFireEngines = EmergencyManagerConnection.prepareStatement(getFireEnginesQuery);
+			ResultSet resultSetFireEngines = pstFireEngines.executeQuery();
+			
+			// Get Intervention
+			String getInterventionsQuery = "select i.id, i.id_fire, i.id_fire_engine, i.start_ts from intervention i where i.id_fire in (select id from fire)";
+			PreparedStatement pstInterventions = EmergencyManagerConnection.prepareStatement(getInterventionsQuery);
+			ResultSet resultSetInterventions = pstInterventions.executeQuery();
+			
+			while (resultSetFireEngines.next()) {
+				
+				int id = Integer.parseInt(resultSetFireEngines.getString("id"));
+				double x = Double.parseDouble(resultSetFireEngines.getString("x_pos"));
+				double y = Double.parseDouble(resultSetFireEngines.getString("y_pos"));
+				int rank = Integer.parseInt(resultSetFireEngines.getString("rank"));
+				boolean busy = Boolean.parseBoolean(resultSetFireEngines.getString("busy"));
+	
+				intervention_fire_engine.add(new FireEngine(id, x, y, rank, busy));
+			}
+	
+			while (resultSetInterventions.next()) {
+	
+				int id = Integer.parseInt(resultSetInterventions.getString("id"));
+				int id_sensor = Integer.parseInt(resultSetInterventions.getString("id_fire"));
+				int id_fire_engine = Integer.parseInt(resultSetInterventions.getString("id_fire_engine"));
+				String start_ts = resultSetInterventions.getString("start_ts");
+				
+				Sensor sensor = null;
+				for(Sensor s : activeSensors) {
+					if(s.getId() == id_sensor) {
+						sensor = s;
+						break;
+					}
+				}
+				
+				FireEngine fireEngine = null;
+				for(FireEngine fe : intervention_fire_engine) {
+					if(fe.getId() == id_fire_engine) {
+						fireEngine = fe;
+						break;
+					}
+				}
+				
+				interventions.add(new Intervention(id, sensor, fireEngine, start_ts));
+			}
+	
+			
+	
+			System.out.println("Got all interventions (" + interventions.size() + ")");
+			if (debug > 0) {
+				for (Intervention intervention : interventions) {
+					System.out.println("\t" + intervention);
+				}
+			}
+			System.out.println();
+			
+			// Deleting handled interventions
+			System.out.println("Checking for handled interventions...");
+			for(Intervention intervention : interventions) {
+				if(intervention.getSensor().getIntensity() <= 0) {
+					
+					try {
+						
+						// Deleting intervention
+						System.out.println("\tDeleteting " + intervention);
+						String deletingInterventionQuery = "delete from intervention where id = " + intervention.getId();
+						PreparedStatement pstIntervention = EmergencyManagerConnection.prepareStatement(deletingInterventionQuery);
+						pstIntervention.executeUpdate();
+						
+						// Freeing trucks
+						System.out.println("\tFreeing " + intervention.getFireEngine());
+						String freeingFireEngineQuery = "update fire_engine set busy = false where id = " + intervention.getFireEngine().getId();
+						PreparedStatement pstFireEngine = EmergencyManagerConnection.prepareStatement(freeingFireEngineQuery);
+						pstFireEngine.executeUpdate();
+						
+						// Updating handling value
+						System.out.println("\tUpdating handling value " + intervention.getSensor());
+						String updatingFireQuery = "update fire set handled = 0 where id = " + intervention.getSensor().getId();
+						PreparedStatement pstFire = EmergencyManagerConnection.prepareStatement(updatingFireQuery);
+						pstFire.executeUpdate();
+						
+						
+					} catch (SQLException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+				}
+			}
+	
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		System.out.println();
+	
+	}
+	
+	private void getFireStations() {
 
 		try {
 			// Get Fire Stations
@@ -180,6 +302,7 @@ public class EmergencyManager {
 					System.out.println(station);
 				}
 			}
+			System.out.println();
 
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
@@ -191,14 +314,22 @@ public class EmergencyManager {
 	private void handleFires() {
 		
 		System.out.println("at least one unhandled fire detected");
+		newInterventions = new ArrayList<>();
 
 		// Ordering fires to manage the most important ones first
 		Collections.sort(unhandledActiveFires);
 
 		// Getting stations with trucks from db
 		stations = new ArrayList<>();
-		this.getFireStationsFromDB();
+		this.getFireStations();
 
+		
+		System.out.printf("\n/////////////////////////////\n");
+		System.out.println("Assigning trucks to fires");
+		System.out.printf("/////////////////////////////\n\n");
+		
+		fireHandled = 0;
+		
 		// Assigning trucks to a fire
 		for (Sensor sensor : unhandledActiveFires) {
 			
@@ -207,7 +338,7 @@ public class EmergencyManager {
 
 			System.out.printf("Sensor: " + sensor.getId() + " - fire handle: " + sensor.getHandled() + "/"
 					+ sensor.getIntensity() + " (" + (sensor.getIntensity() - sensor.getHandled()) + ")"
-					+ "\t- stations ordered: ");
+					+ " - stations ordered: ");
 			for (Station s : orderedStations) {
 				System.out.printf(s.getId() + " ( ");
 				for (FireEngine fe : s.getFireEngines()) {
@@ -226,20 +357,10 @@ public class EmergencyManager {
 				
 				for(FireEngine fe : closestStation.getFireEngines()) {
 					
-					if(fe.getRank() == sensor.getIntensity() - sensor.getHandled()) {
-						System.out.println("Assigning truck with level " + fe.getRank() + " from station " + closestStation.getId() + " to fire with unhandled intensity of " + (sensor.getIntensity()-sensor.getHandled()));
-						sensor.increaseHandled(fe.getRank());
+					if(fe.getRank() >= sensor.getIntensity() - sensor.getHandled()) {
 						done = true;
 						fireEngine = fe;
 						break;
-					}
-					
-					if(fe.getRank() == sensor.getIntensity() - sensor.getHandled() + 1) {
-						fireEngine = fe;
-					}
-					
-					if(fe.getRank() == sensor.getIntensity() - sensor.getHandled() + 2 && fireEngine == null) {
-						fireEngine = fe;
 					}
 
 					maxStation += fe.getRank();
@@ -248,27 +369,26 @@ public class EmergencyManager {
 				
 				if (done) {
 					
-					closestStation.removeTruck(fireEngine);
-					Station globalStation = stations.get(stations.indexOf(closestStation));
-					globalStation.removeTruck(fireEngine);
-					if (globalStation.getFireEngines().size() <= 0) stations.remove(globalStation);
-					
-				} else if(fireEngine != null) {
-					
-					System.out.println("Assigning truck with level " + fireEngine.getRank() + " (only one or two above so it's close enough) from station " + closestStation.getId() + " to fire with unhandled intensity of " + (sensor.getIntensity()-sensor.getHandled()));
-					sensor.increaseHandled(fireEngine.getRank());
+					// Assigning
+					System.out.println("\tAssigning truck with level " + fireEngine.getRank() + " from station " + closestStation.getId() + " to fire with unhandled intensity of " + (sensor.getIntensity()-sensor.getHandled()));
+					newInterventions.add(new Intervention(sensor, fireEngine, "Test"));
+					sensor.increaseHandled(fireEngine.getRank());	
 					
 					closestStation.removeTruck(fireEngine);
-					Station globalStation = stations.get(stations.indexOf(closestStation));
-					globalStation.removeTruck(fireEngine);
-					if (globalStation.getFireEngines().size() <= 0) stations.remove(globalStation);
+					if(closestStation.getFireEngines().size()>0) {
+						stations.get(stations.indexOf(closestStation)).removeTruck(fireEngine);
+					} else {
+						stations.remove(closestStation);
+					}
 					
 				} else {	
 					
 					if(maxStation < (sensor.getIntensity() - sensor.getHandled())) {
-						System.out.println("Assigning all trucks from the station " + closestStation.getId() + " as they'll anyway be not enough");
+						System.out.println("\tAssigning all trucks from the station " + closestStation.getId() + " as they'll anyway be not enough");
 						
 						for(FireEngine fe : closestStation.getFireEngines()) {
+							// Assigning
+							newInterventions.add(new Intervention(sensor, fe, "Test"));
 							sensor.increaseHandled(fe.getRank());
 						}
 						
@@ -276,19 +396,72 @@ public class EmergencyManager {
 						stations.remove(closestStation);
 						
 					} else {
-						fireEngine = closestStation.getFireEngines().get(0);
-						System.out.println("Assigning smallest trucks (" + fireEngine.getRank() + ") from the station " + closestStation.getId());
+						
+						fireEngine = closestStation.getFireEngines().get(closestStation.getFireEngines().size()-1);
+						
+						// Assigning
+						System.out.println("\tAssigning bigger truck (" + fireEngine.getRank() + ") from the station " + closestStation.getId());
+						newInterventions.add(new Intervention(sensor, fireEngine, "Test"));
 						sensor.increaseHandled(fireEngine.getRank());
+						
 						closestStation.removeTruck(fireEngine);
-						stations.get(stations.indexOf(closestStation)).removeTruck(fireEngine);
+						if(closestStation.getFireEngines().size()>0) {
+							stations.get(stations.indexOf(closestStation)).removeTruck(fireEngine);
+						} else {
+							stations.remove(closestStation);
+						}
+						
 					}
 					
 				}
 				
 			}
 			
-			System.out.println("Sensor: " + sensor.getId() + " - fire handle: " + sensor.getHandled() + "/"
+			System.out.println("\tSensor " + sensor.getId() + " - fire handle: " + sensor.getHandled() + "/"
 					+ sensor.getIntensity() + " (" + (sensor.getIntensity() - sensor.getHandled()) + ")");
+			
+			if(sensor.getIntensity() - sensor.getHandled() <= 0) {
+				fireHandled ++;
+				System.out.printf("\tSensor " + sensor.getId() + " handled\n\n");
+			} else {
+				System.out.printf("Sensor " + sensor.getId() + " not handled \nOut of fire engines \n\n");
+				break;
+			}
+			
 		}
+	}
+	
+	private void addInterventions() {
+		
+		for(Intervention intervention : newInterventions) {
+			
+			try {
+				
+				// Adding new intervention
+				String addInterventionQuery = "insert into intervention (id_fire_engine, id_fire, start_ts) values ("+ intervention.getFireEngine().getId() +", "+ intervention.getSensor().getId() +", '"+ intervention.getStart_ts() +"')";
+				PreparedStatement pstInterventions = EmergencyManagerConnection.prepareStatement(addInterventionQuery);
+				pstInterventions.executeUpdate();
+				System.out.println("Added : " + intervention);
+				
+				// Updating fire engine status
+				String updateFireEngineQuery = "update fire_engine set busy = true where id = " + intervention.getFireEngine().getId();
+				PreparedStatement pstFireEngines = EmergencyManagerConnection.prepareStatement(updateFireEngineQuery);
+				pstFireEngines.executeUpdate();
+				System.out.println("Fire engine status updated");
+				
+				// Updating fire handle
+				String updateFireQuery = "update fire set handled = " + intervention.getSensor().getHandled() + " where id = " + intervention.getSensor().getId();
+				PreparedStatement pstFires = EmergencyManagerConnection.prepareStatement(updateFireQuery);
+				pstFires.executeUpdate();
+				System.out.println("Fire handled value updated");
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+			System.out.println();
+
+		}
+		
 	}
 }

@@ -1,39 +1,44 @@
 package model;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class Intervention {
 
 	private int id;
 	private Sensor sensor;
 	private String start_ts;
-	private List<FireEngine> fireEngines;
+	private FireEngine fireEngine;
 	
-	public Intervention(int id, Sensor sensor, String start_ts) {
+	public Intervention(Sensor sensor, FireEngine fireEngine, String start_ts) {
+		super();
+		id = -1;
+		this.sensor = sensor;
+		this.start_ts = start_ts;
+		this.fireEngine = fireEngine;
+	}
+	
+	public Intervention(int id, Sensor sensor, FireEngine fireEngine, String start_ts) {
 		super();
 		this.id = id;
 		this.sensor = sensor;
 		this.start_ts = start_ts;
-		this.fireEngines = new ArrayList<>();
+		this.fireEngine = fireEngine;
 	}
 	
 	public int getId() {
-		return id;
+		return this.id;
 	}
-
+	
 	public void setId(int id) {
 		this.id = id;
 	}
-	
+
 	public Sensor getSensor() {
 		return sensor;
 	}
-	
+
 	public void setSensor(Sensor sensor) {
 		this.sensor = sensor;
 	}
-	
+
 	public String getStart_ts() {
 		return start_ts;
 	}
@@ -42,18 +47,17 @@ public class Intervention {
 		this.start_ts = start_ts;
 	}
 
-	public List<FireEngine> getFireEngines() {
-		return fireEngines;
+	public FireEngine getFireEngine() {
+		return fireEngine;
 	}
-	
-	public void addFireEngine(FireEngine fireEngine) {
-		this.fireEngines.add(fireEngine);
+
+	public void setFireEngine(FireEngine fireEngine) {
+		this.fireEngine = fireEngine;
 	}
 
 	@Override
 	public String toString() {
-		return "Intervention [id=" + id + ", sensor=" + sensor + ", start_ts=" + start_ts + ", fireEngines="
-				+ fireEngines + "]";
+		return "Intervention [id=" + id + " ,sensor=" + sensor + ", start_ts=" + start_ts + ", fireEngine=" + fireEngine.getId() + "]";
 	}
 
 }
