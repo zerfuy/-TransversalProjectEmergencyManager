@@ -6,21 +6,24 @@ public class Intervention {
 	private Sensor sensor;
 	private String start_ts;
 	private FireEngine fireEngine;
+	private boolean returning;
 	
-	public Intervention(Sensor sensor, FireEngine fireEngine, String start_ts) {
+	public Intervention(Sensor sensor, FireEngine fireEngine, String start_ts, boolean returning) {
 		super();
 		id = -1;
 		this.sensor = sensor;
 		this.start_ts = start_ts;
 		this.fireEngine = fireEngine;
+		this.returning = returning;
 	}
 	
-	public Intervention(int id, Sensor sensor, FireEngine fireEngine, String start_ts) {
+	public Intervention(int id, Sensor sensor, FireEngine fireEngine, String start_ts, boolean returning) {
 		super();
 		this.id = id;
 		this.sensor = sensor;
 		this.start_ts = start_ts;
 		this.fireEngine = fireEngine;
+		this.returning = returning;
 	}
 	
 	public int getId() {
@@ -53,6 +56,14 @@ public class Intervention {
 
 	public void setFireEngine(FireEngine fireEngine) {
 		this.fireEngine = fireEngine;
+	}
+
+	public boolean isReturning() {
+		return returning;
+	}
+
+	public void setReturning(boolean returning) {
+		this.returning = returning;
 	}
 
 	@Override

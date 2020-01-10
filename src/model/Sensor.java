@@ -1,5 +1,7 @@
 package model;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,8 +16,8 @@ public class Sensor implements Comparable<Sensor> {
 	public Sensor(int id, double x, double y, int intensity, int handled) {
 		super();
 		this.id = id;
-		this.x = x;
-		this.y = y;
+		this.x = new BigDecimal(x).setScale(4, RoundingMode.HALF_EVEN).doubleValue();
+		this.y = new BigDecimal(y).setScale(4, RoundingMode.HALF_EVEN).doubleValue();;
 		this.intensity = intensity;
 		this.handled = handled;
 	}

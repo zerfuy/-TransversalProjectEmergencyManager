@@ -1,5 +1,8 @@
 package model;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 public class FireEngine implements Comparable<FireEngine> {
 
 	private int id;
@@ -11,8 +14,8 @@ public class FireEngine implements Comparable<FireEngine> {
 	public FireEngine(int id, double x, double y, int rank, boolean busy) {
 		super();
 		this.id = id;
-		this.x = x;
-		this.y = y;
+		this.x = new BigDecimal(x).setScale(4, RoundingMode.HALF_EVEN).doubleValue();
+		this.y = new BigDecimal(y).setScale(4, RoundingMode.HALF_EVEN).doubleValue();
 		this.rank = rank;
 		this.busy = busy;
 	}
@@ -55,6 +58,10 @@ public class FireEngine implements Comparable<FireEngine> {
 
 	public void setBusy(boolean busy) {
 		this.busy = busy;
+	}
+	
+	public boolean isHome(Station station) {	
+		return this.x == station.getSensor().getX() && this.y == station.getSensor().getY();
 	}
 
 	@Override
