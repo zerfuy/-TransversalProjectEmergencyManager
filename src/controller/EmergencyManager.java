@@ -156,7 +156,7 @@ public class EmergencyManager {
 			ResultSet resultSetFireEngines = pstFireEngines.executeQuery();
 			
 			// Get Intervention
-			String getInterventionsQuery = "select i.id, i.id_fire, i.id_fire_engine, i.start_ts, i.returning from intervention i where i.id_fire in (select id from fire)";
+			String getInterventionsQuery = "select i.id, i.id_fire, i.id_fire_engine, i.start_ts, i.returning_ from intervention i where i.id_fire in (select id from fire)";
 			PreparedStatement pstInterventions = EmergencyManagerConnection.prepareStatement(getInterventionsQuery);
 			ResultSet resultSetInterventions = pstInterventions.executeQuery();
 			
@@ -177,7 +177,7 @@ public class EmergencyManager {
 				int id_sensor = Integer.parseInt(resultSetInterventions.getString("id_fire"));
 				int id_fire_engine = Integer.parseInt(resultSetInterventions.getString("id_fire_engine"));
 				String start_ts = resultSetInterventions.getString("start_ts");
-				boolean returning =Boolean.parseBoolean(resultSetInterventions.getString("returning"));
+				boolean returning =Boolean.parseBoolean(resultSetInterventions.getString("returning_"));
 				
 				Sensor sensor = null;
 				for(Sensor s : activeSensors) {
