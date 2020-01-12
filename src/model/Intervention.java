@@ -68,7 +68,7 @@ public class Intervention {
 
 	@Override
 	public String toString() {
-		return "Intervention [id=" + id + " ,sensor=" + sensor + ", start_ts=" + start_ts + ", fireEngine=" + fireEngine.getId() + "]";
+		return "Intervention [id=" + id + " ,sensor=" + sensor + ", start_ts=" + start_ts + ", fireEngine=" + fireEngine.getId() + ", returning: " + returning + "]";
 	}
 
 }

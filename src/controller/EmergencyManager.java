@@ -24,6 +24,7 @@ public class EmergencyManager {
 	private List<Station> stations;
 	private List<Intervention> interventions;
 	private List<Intervention> newInterventions;
+	private List<Station> fullStations;
 	private int fireHandled;
 
 	public EmergencyManager() {
@@ -148,6 +149,9 @@ public class EmergencyManager {
 		interventions = new ArrayList<>();
 		List<FireEngine> intervention_fire_engine = new ArrayList<>();
 		
+		// Getting stations with fire_engines from db
+		this.getFullFireStations();
+		
 		try {
 			
 			// Get Intervention fire engine
@@ -177,7 +181,7 @@ public class EmergencyManager {
 				int id_sensor = Integer.parseInt(resultSetInterventions.getString("id_fire"));
 				int id_fire_engine = Integer.parseInt(resultSetInterventions.getString("id_fire_engine"));
 				String start_ts = resultSetInterventions.getString("start_ts");
-				boolean returning =Boolean.parseBoolean(resultSetInterventions.getString("returning_"));
+				boolean returning = resultSetInterventions.getString("returning_").equals("t");
 				
 				Sensor sensor = null;
 				for(Sensor s : activeSensors) {
@@ -210,9 +214,20 @@ public class EmergencyManager {
 			System.out.println("Checking for handled interventions...");
 			for(Intervention intervention : interventions) {
 				
-				Station station = null;
-				for(Station s : stations) {
-					if(s.getFireEngines().contains(intervention.getFireEngine())) {
+				System.out.println(intervention);
+				
+				Station station = null;				
+
+				for(Station s : fullStations) {
+					boolean isIn = false;
+					for(FireEngine fe : s.getFireEngines()) {
+						if(fe.getId() == intervention.getFireEngine().getId()) {
+							isIn = true;
+							break;
+						}
+					}
+					
+					if(isIn) {
 						station = s;
 						break;
 					}
@@ -224,7 +239,7 @@ public class EmergencyManager {
 						
 						// Getting fire engines back to the station
 						System.out.println("\tChanging " + intervention + " back to home");
-						String updatingInterventionQuery = "update intervention set id_fire = ? where id = ?";
+						String updatingInterventionQuery = "update intervention set id_fire = ?, returning_ = true where id = ?";
 						PreparedStatement pstIntervention = EmergencyManagerConnection.prepareStatement(updatingInterventionQuery);
 						pstIntervention.setInt(1, station.getId());
 						pstIntervention.setInt(2, intervention.getId());
@@ -252,13 +267,14 @@ public class EmergencyManager {
 					
 				}
 			}
+			System.out.println();
 			
 			// Deleting handled interventions
 			System.out.println("Checking for fire engines comming back to the station...");
 			for(Intervention intervention : interventions) {
 				
 				Station station = null;
-				for(Station s : stations) {
+				for(Station s : fullStations) {
 					if(s.getFireEngines().contains(intervention.getFireEngine())) {
 						station = s;
 						break;
@@ -283,7 +299,6 @@ public class EmergencyManager {
 					
 				}
 			}
-			
 	
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
@@ -306,6 +321,8 @@ public class EmergencyManager {
 	
 	private void getFireStations() {
 
+		stations = new ArrayList<>();
+		
 		try {
 			// Get Fire Stations
 			String getStations = "select s.id, s.id_real_pos, s.name from station s where s.id in (select fe.id_station from fire_engine fe where fe.busy = false)";
@@ -353,7 +370,70 @@ public class EmergencyManager {
 			System.out.println("Got all stations (" + stations.size() + ")");
 			if (debug > 0) {
 				for (Station station : stations) {
-					System.out.println(station);
+					System.out.println("\t" + station);
+				}
+			}
+			System.out.println();
+
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+
+	private void getFullFireStations() {
+		
+		fullStations = new ArrayList<>();
+
+		try {
+			// Get Fire Stations
+			String getStations = "select s.id, s.id_real_pos, s.name from station s";
+			PreparedStatement pstStations = EmergencyManagerConnection.prepareStatement(getStations);
+			ResultSet resultSetStations = pstStations.executeQuery();
+
+			while (resultSetStations.next()) {
+
+				int id = Integer.parseInt(resultSetStations.getString("id"));
+				int id_real_pos = Integer.parseInt(resultSetStations.getString("id_real_pos"));
+				String name = resultSetStations.getString("name");
+
+				Sensor sensorStation = null;
+				for (Sensor sSensor : stationSensors) {
+					if (sSensor.getId() == id_real_pos) {
+						sensorStation = sSensor;
+						break;
+					}
+				}
+
+				Station station = new Station(id, name, sensorStation);
+				// Get Fire Engines
+				String getFireEngines = "select fe.id, fe.x_pos, fe.y_pos, fe.rank, fe.busy from fire_engine fe where fe.id_station = ?";
+				PreparedStatement pstFireEngines = EmergencyManagerConnection.prepareStatement(getFireEngines);
+				pstFireEngines.setInt(1, id);
+				ResultSet resultSetFireEngines = pstFireEngines.executeQuery();
+
+				while (resultSetFireEngines.next()) {
+
+					int idt = Integer.parseInt(resultSetFireEngines.getString("id"));
+					double x = Double.parseDouble(resultSetFireEngines.getString("x_pos"));
+					double y = Double.parseDouble(resultSetFireEngines.getString("y_pos"));
+					int rank = Integer.parseInt(resultSetFireEngines.getString("rank"));
+					boolean busy = Boolean.parseBoolean(resultSetFireEngines.getString("busy"));
+
+					station.addFireEngine(new FireEngine(idt, x, y, rank, busy));
+				}
+				
+				station.sortFireEngine();
+
+				fullStations.add(station);
+
+			}
+
+			System.out.println("Got all stations (" + fullStations.size() + ")");
+			if (debug > 0) {
+				for (Station station : fullStations) {
+					System.out.println("\t" + station);
 				}
 			}
 			System.out.println();
@@ -373,8 +453,7 @@ public class EmergencyManager {
 		// Ordering fires to manage the most important ones first
 		Collections.sort(unhandledActiveFires);
 
-		// Getting stations with trucks from db
-		stations = new ArrayList<>();
+		// Getting stations with fire_engines from db
 		this.getFireStations();
 
 		
@@ -517,6 +596,22 @@ public class EmergencyManager {
 				pstFires.setInt(2, intervention.getSensor().getId());
 				pstFires.executeUpdate();
 				System.out.println("Fire handled value updated");
+				
+				// Deleting return home
+				for(Intervention i : interventions) {
+					
+					if(i.getFireEngine().getId() == intervention.getFireEngine().getId()) {
+						String deleteInterventionQuery = "delete from intervention where id = ?";
+						PreparedStatement pstOldIntervention = EmergencyManagerConnection.prepareStatement(deleteInterventionQuery);
+						pstOldIntervention.setInt(1, i.getId());
+						pstOldIntervention.executeUpdate();
+						System.out.println("Old intervention deleted");
+						break;
+					}
+					
+				}
+				
+				
 			} catch (SQLException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -527,4 +622,8 @@ public class EmergencyManager {
 		}
 		
 	}
+
 }
+
+
+
